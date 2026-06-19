@@ -38,6 +38,7 @@ from protomotions.utils.mesh_utils import (
     as_mesh,
     compute_bounding_box,
 )
+from protomotions.utils.usd_articulation import usd_compute_bounding_box
 from protomotions.simulator.base_simulator.simulator_state import (
     ObjectState,
     StateConversion,
@@ -66,6 +67,7 @@ class ObjectOptions:
     """
 
     fix_base_link: bool = field(default=None)
+    is_articulated: bool = False
     vhacd_enabled: bool = None
     vhacd_params: Dict = field(
         default_factory=lambda: {
@@ -361,6 +363,16 @@ class MeshSceneObject(SceneObject):
                 mesh_path = ply_path
             mesh = as_mesh(trimesh.load_mesh(mesh_path))
             w_x, w_y, w_z, m_x, m_y, m_z = compute_bounding_box(mesh)
+        elif os.path.exists(self.object_path) and self.object_path.lower().endswith(
+            (".usd", ".usda", ".usdc")
+        ):
+            usd_dims = usd_compute_bounding_box(self.object_path)
+            if usd_dims is None:
+                raise FileNotFoundError(
+                    f"Could not compute bounding box for USD asset: {self.object_path}. "
+                    "Provide object_dims explicitly or add a companion .stl/.obj file."
+                )
+            return usd_dims
         else:
             raise FileNotFoundError(
                 f"Object file not found: {obj_path} / {stl_path} / {ply_path}"
@@ -2111,6 +2123,9 @@ class SceneLib:
                         rotation=rotation,
                         fps=obj_data["fps"],
                         options=options,
+                        object_dims=tuple(obj_data["object_dims"])
+                        if obj_data.get("object_dims") is not None
+                        else None,
                     )
 
                 objects.append(obj)

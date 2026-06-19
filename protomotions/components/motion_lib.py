@@ -607,6 +607,26 @@ class MotionLib:
             file_path: Path to the motion library file
         """
         print(f"Loading motion library from {file_path}")
+        # numpy 2.x moved internals to numpy._core; patch for numpy 1.x envs
+        import sys
+        import importlib
+        import numpy
+
+        if not hasattr(numpy, "_core"):
+            sys.modules.setdefault("numpy._core", importlib.import_module("numpy.core"))
+            for _sub in [
+                "multiarray",
+                "umath",
+                "fromnumeric",
+                "numeric",
+                "numerictypes",
+                "_methods",
+            ]:
+                sys.modules.setdefault(
+                    f"numpy._core.{_sub}",
+                    importlib.import_module(f"numpy.core.{_sub}"),
+                )
+
         loaded_data = torch.load(
             file_path, map_location=self.device, weights_only=False
         )

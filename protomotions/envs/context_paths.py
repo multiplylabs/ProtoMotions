@@ -263,9 +263,43 @@ def resolve_path(ctx: Any, path: str) -> Any:
     return value
 
 
+class ExternalNamespace:
+    """Class-level path proxy for a runtime-attached context view.
+
+    Lets an external (out-of-tree) module declare context paths
+    (e.g. "my_task.my_field") without editing EnvContext. Attribute access
+    returns a FieldPath whose parent is the namespace, matching what NestedField
+    produces for a registered view. The view itself is attached at runtime via a
+    plain ``ctx.<namespace> = view`` assignment in a control's populate_context.
+    """
+
+    def __init__(self, namespace: str, fields: list):
+        self._namespace = namespace
+        self._fields = set(fields)
+
+    def __getattr__(self, name: str) -> "FieldPath":
+        # Guard against recursion on the private attrs set in __init__.
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._fields:
+            fp = FieldPath(parent_path=self._namespace)
+            fp.name = name
+            return fp
+        raise AttributeError(
+            f"'{name}' is not a declared field of namespace '{self._namespace}'"
+        )
+
+
+def external_namespace(namespace: str, fields: list) -> ExternalNamespace:
+    """Build a class-level path object for an external (out-of-tree) context view."""
+    return ExternalNamespace(namespace, fields)
+
+
 # Exports
 __all__ = [
     "FieldPath",
     "NestedField",
     "resolve_path",
+    "ExternalNamespace",
+    "external_namespace",
 ]

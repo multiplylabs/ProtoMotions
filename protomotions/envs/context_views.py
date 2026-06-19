@@ -527,6 +527,8 @@ class EnvContext:
     current_contact_force_magnitudes: Optional[Tensor] = FieldPath()
     prev_contact_force_magnitudes: Optional[Tensor] = FieldPath()
     dt: float = FieldPath()
+    progress_buf: Optional[Tensor] = FieldPath()
+    non_termination_contact_body_ids: Optional[Tensor] = FieldPath()
 
     # Contact tracking
     contact_body_ids: Optional[Tensor] = FieldPath()
@@ -553,6 +555,8 @@ class EnvContext:
         current_contact_force_magnitudes: Optional[Tensor] = None,
         prev_contact_force_magnitudes: Optional[Tensor] = None,
         contact_body_ids: Optional[Tensor] = None,
+        progress_buf: Optional[Tensor] = None,
+        non_termination_contact_body_ids: Optional[Tensor] = None,
         mimic: Optional[MimicContext] = None,
         masked_mimic: Optional[MaskedMimicContext] = None,
         steering: Optional[SteeringContext] = None,
@@ -600,6 +604,9 @@ class EnvContext:
         self.body_contacts = body_contacts
         self.current_contact_force_magnitudes = current_contact_force_magnitudes
         self.prev_contact_force_magnitudes = prev_contact_force_magnitudes
+
+        self.progress_buf = progress_buf
+        self.non_termination_contact_body_ids = non_termination_contact_body_ids
 
         # Contact tracking
         self.contact_body_ids = contact_body_ids

@@ -925,6 +925,8 @@ class BaseEnv:
             current_contact_force_magnitudes=current_contact_force_magnitudes,
             prev_contact_force_magnitudes=self.prev_contact_force_magnitudes,
             dt=self.dt,
+            progress_buf=self.progress_buf,
+            non_termination_contact_body_ids=self.non_termination_contact_body_ids,
             # Contact tracking
             contact_body_ids=self.contact_body_ids,
         )

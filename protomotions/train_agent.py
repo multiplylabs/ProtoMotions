@@ -455,6 +455,11 @@ def save_configs(
     log.info(f"Copying experiment file to {experiment_copy_path}")
     shutil.copy(experiment_source_path, experiment_copy_path)
 
+    if args.use_wandb:
+        from protomotions.utils.wandb_utils import upload_configs_to_wandb
+
+        upload_configs_to_wandb(save_dir)
+
 
 def try_log_hyperparams_to_wandb(
     fabric,
@@ -654,16 +659,18 @@ def main():
     ]
 
     if args.use_wandb:
+        from protomotions.utils.wandb_utils import get_wandb_entity, get_wandb_project
+
         loggers.append(
             {
                 "_target_": "lightning.pytorch.loggers.WandbLogger",
                 "name": args.experiment_name,
                 "save_dir": save_dir,
-                "project": "physical_animation",
+                "project": get_wandb_project(),
                 "tags": None,
                 "group": None,
                 "id": wandb_id,
-                "entity": None,
+                "entity": get_wandb_entity(),
                 "resume": "allow",
             }
         )

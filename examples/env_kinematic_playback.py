@@ -208,6 +208,22 @@ def main():
     if args.scenes_file is not None:
         print(f"Scene library configured from: {args.scenes_file}")
 
+    apply_inference_overrides_fn = getattr(
+        experiment_module, "apply_inference_overrides", None
+    )
+    if apply_inference_overrides_fn is not None:
+        print("Applying experiment inference overrides")
+        apply_inference_overrides_fn(
+            robot_config,
+            simulator_config,
+            env_config,
+            None,
+            terrain_config,
+            motion_lib_config,
+            scene_lib_config,
+            args,
+        )
+
     # Enable kinematic playback mode using KinematicReplayControl
     from protomotions.envs.control.kinematic_replay_control import (
         KinematicReplayControlConfig,
@@ -229,6 +245,11 @@ def main():
     
     # Disable rewards - not needed for kinematic playback
     env_config.reward_components = {}
+
+    env_config.max_episode_length = 1000000
+    if env_config.motion_manager is not None:
+        env_config.motion_manager.init_start_prob = 1.0
+    simulator_config.domain_randomization = None
 
     print("\n=== Creating Environment ===")
 

@@ -39,6 +39,7 @@ from pathlib import Path
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from protomotions.simulator.isaaclab.utils.scene import SceneCfg
+from protomotions.utils.usd_articulation import usd_has_articulation_root
 from protomotions.simulator.isaaclab.config import (
     IsaacLabSimulatorConfig,
     ProtoMotionsIsaacLabMarkers,
@@ -169,8 +170,11 @@ class IsaacLabSimulator(Simulator):
             SceneCfg: The constructed scene configuration.
         """
         scene_cfgs = None
+        object_is_articulated = None
         if self.scene_lib.num_scenes() > 0:
-            scene_cfgs, self._initial_scene_pos = self._preprocess_object_playground()
+            scene_cfgs, self._initial_scene_pos, object_is_articulated = (
+                self._preprocess_object_playground()
+            )
 
         scene_cfg = SceneCfg(
             config=self.config,
@@ -178,6 +182,7 @@ class IsaacLabSimulator(Simulator):
             num_envs=self.config.num_envs,
             env_spacing=2.0,
             scene_cfgs=scene_cfgs,
+            object_is_articulated=object_is_articulated,
             terrain=self.terrain,
             projectile_config=self._proj_config,
             replicate_physics=scene_cfgs
@@ -185,12 +190,25 @@ class IsaacLabSimulator(Simulator):
         )
         return scene_cfg
 
-    def _preprocess_object_playground(self) -> Tuple[List[Any], torch.Tensor]:
+    def _resolve_object_is_articulated(
+        self, obj: MeshSceneObject, asset_path: Path, object_options
+    ) -> bool:
+        """Determine whether a mesh object should spawn as an IsaacLab articulation."""
+        if object_options.is_articulated:
+            return True
+        if asset_path.suffix.lower() in (".usd", ".usda", ".usdc"):
+            return usd_has_articulation_root(str(asset_path))
+        return False
+
+    def _preprocess_object_playground(
+        self,
+    ) -> Tuple[List[Any], torch.Tensor, List[bool]]:
         """
         Process and build the object playground from the scene library.
 
         Returns:
-            Tuple[List[Any], torch.Tensor]: A tuple containing the object configurations and the initial object positions.
+            Tuple containing object spawn configs, initial object positions, and
+            per-object articulation flags.
         """
         print("=========== Building object playground")
 
@@ -205,8 +223,12 @@ class IsaacLabSimulator(Simulator):
 
         # Build object configurations for IsaacLab
         objects_cfgs = []
+        object_is_articulated = []
         for _ in range(self.scene_lib.num_objects_per_scene):
             objects_cfgs.append([])
+            object_is_articulated.append(False)
+
+        activate_contact_sensors = self.robot_config.contact_bodies is not None
 
         for env_id, scene in enumerate(self.scene_lib.scenes):
             for obj_idx, obj in enumerate(scene.objects):
@@ -227,6 +249,7 @@ class IsaacLabSimulator(Simulator):
                     object_options.color if object_options.color is not None else None
                 )
 
+                is_articulated = False
                 # Handle different object types
                 if isinstance(obj, MeshSceneObject):
                     main_dir_path = (
@@ -235,18 +258,42 @@ class IsaacLabSimulator(Simulator):
                     asset_path = Path(
                         os.path.join(main_dir_path, obj.object_path)
                     ).resolve()
-                    mass_props = self._mass_props_from_options(object_options)
+                    is_articulated = self._resolve_object_is_articulated(
+                        obj, asset_path, object_options
+                    )
+                    object_is_articulated[obj_idx] = is_articulated
 
-                    spawn_cfg = sim_utils.UsdFileCfg(
-                        usd_path=str(asset_path),
-                        rigid_props=rigid_props,
-                        mass_props=mass_props,
-                        collision_props=collision_props,
-                        visual_material=sim_utils.PreviewSurfaceCfg(
+                    spawn_kwargs = {
+                        "visual_material": sim_utils.PreviewSurfaceCfg(
                             diffuse_color=obj_color or (0.2, 0.7, 0.3),
                             metallic=0.2,
                         ),
-                    )
+                    }
+                    if is_articulated:
+                        spawn_kwargs.update(
+                            {
+                                "usd_path": str(asset_path),
+                                "activate_contact_sensors": False,
+                                "rigid_props": rigid_props,
+                                "articulation_props": sim_utils.ArticulationRootPropertiesCfg(
+                                    enabled_self_collisions=False,
+                                    fix_root_link=bool(object_options.fix_base_link),
+                                    solver_position_iteration_count=self.config.sim.physx.num_position_iterations,
+                                    solver_velocity_iteration_count=self.config.sim.physx.num_velocity_iterations,
+                                ),
+                                "collision_props": collision_props,
+                            }
+                        )
+                        spawn_cfg = sim_utils.UsdFileCfg(**spawn_kwargs)
+                    else:
+                        mass_props = self._mass_props_from_options(object_options)
+                        spawn_cfg = sim_utils.UsdFileCfg(
+                            usd_path=str(asset_path),
+                            rigid_props=rigid_props,
+                            mass_props=mass_props,
+                            collision_props=collision_props,
+                            **spawn_kwargs,
+                        )
                 elif isinstance(obj, BoxSceneObject):
                     mass_props = self._mass_props_from_options(object_options)
                     spawn_cfg = sim_utils.CuboidCfg(
@@ -289,7 +336,7 @@ class IsaacLabSimulator(Simulator):
 
                 objects_cfgs[obj_idx].append(spawn_cfg)
 
-        return objects_cfgs, initial_obj_pos
+        return objects_cfgs, initial_obj_pos, object_is_articulated
 
     @staticmethod
     def _mass_props_from_options(options):

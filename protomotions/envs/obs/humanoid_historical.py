@@ -20,7 +20,7 @@ computations. They are separated from the ctx-taking wrappers in
 humanoid_obs_functions.py to keep the code organization clean.
 """
 
-from typing import List, Union
+from typing import Callable, List, Optional, Union
 
 import torch
 from torch import Tensor
@@ -155,6 +155,7 @@ def compute_historical_max_coords_from_state(
     observe_contacts: bool = False,
     w_last: bool = True,
     history_steps: Union[int, List[int]] = None,
+    body_transform: Optional[Callable] = None,
 ) -> Tensor:
     """Compute historical max_coords observations from state history tensors.
     
@@ -209,6 +210,10 @@ def compute_historical_max_coords_from_state(
     flat_body_rot = body_rot.reshape(batch_size, num_bodies, 4)
     flat_body_vel = body_vel.reshape(batch_size, num_bodies, 3)
     flat_body_ang_vel = body_ang_vel.reshape(batch_size, num_bodies, 3)
+    if body_transform is not None:
+        flat_body_pos, flat_body_rot, flat_body_vel, flat_body_ang_vel = body_transform(
+            flat_body_pos, flat_body_rot, flat_body_vel, flat_body_ang_vel
+        )
     flat_ground_height = ground_heights.reshape(batch_size, 1)
     flat_contacts = body_contacts.reshape(batch_size, num_contact_bodies)
     
@@ -418,6 +423,7 @@ def compute_historical_max_coords_from_motion_lib(
     local_obs: bool = True,
     root_height_obs: bool = True,
     history_steps: Union[int, List[int]] = None,
+    body_transform: Optional[Callable] = None,
 ) -> Tensor:
     """Compute historical max_coords observations from motion library reference data.
     
@@ -466,12 +472,21 @@ def compute_historical_max_coords_from_motion_lib(
         # Use empty contacts (reference doesn't have contact info)
         num_bodies = ref_state.rigid_body_pos.shape[1]
         body_contacts = torch.zeros(num_samples, num_bodies, dtype=torch.bool, device=device)
+
+        body_pos = ref_state.rigid_body_pos
+        body_rot = ref_state.rigid_body_rot
+        body_vel = ref_state.rigid_body_vel
+        body_ang_vel = ref_state.rigid_body_ang_vel
+        if body_transform is not None:
+            body_pos, body_rot, body_vel, body_ang_vel = body_transform(
+                body_pos, body_rot, body_vel, body_ang_vel
+            )
         
         frame_obs = compute_humanoid_max_coords_observations(
-            body_pos=ref_state.rigid_body_pos,
-            body_rot=ref_state.rigid_body_rot,
-            body_vel=ref_state.rigid_body_vel,
-            body_ang_vel=ref_state.rigid_body_ang_vel,
+            body_pos=body_pos,
+            body_rot=body_rot,
+            body_vel=body_vel,
+            body_ang_vel=body_ang_vel,
             ground_height=ground_height,
             body_contacts=body_contacts,
             local_obs=local_obs,

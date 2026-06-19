@@ -24,7 +24,6 @@ import torch
 from torch import Tensor
 
 
-@torch.jit.script
 def check_path_distance_term(
     head_pos: Tensor,
     target_pos: Tensor,
@@ -54,7 +53,6 @@ def check_path_distance_term(
     return tar_fail
 
 
-@torch.jit.script
 def check_path_height_term(
     head_pos: Tensor,
     target_pos: Tensor,
@@ -90,7 +88,6 @@ def check_path_height_term(
 # ==============================================================================
 
 
-@torch.jit.script
 def check_steering_velocity_error(
     root_pos: Tensor,
     prev_root_pos: Tensor,

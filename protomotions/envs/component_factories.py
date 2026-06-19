@@ -1263,6 +1263,58 @@ def steering_velocity_error_factory(
     )
 
 
+def fall_termination_factory(termination_height: float = 0.25) -> MdpComponent:
+    """Factory for fall termination (unwanted contact + low body height).
+
+    Terminates when a non-foot body both contacts the ground and falls below
+    ``termination_height`` above the terrain.
+
+    Args:
+        termination_height: Minimum body height above ground before fall (meters).
+
+    Returns:
+        MdpComponent configured for fall termination.
+    """
+    from protomotions.envs.terminations import fall_termination
+
+    return MdpComponent(
+        compute_func=fall_termination,
+        dynamic_vars={
+            "rigid_body_pos": EnvContext.current.rigid_body_pos,
+            "rigid_body_contacts": EnvContext.current.rigid_body_contacts,
+            "ground_heights": EnvContext.ground_heights,
+            "non_termination_contact_body_ids": EnvContext.non_termination_contact_body_ids,
+            "progress_buf": EnvContext.progress_buf,
+        },
+        static_params={"termination_height": termination_height},
+    )
+
+
+def fall_height_termination_factory(termination_height: float = 0.25) -> MdpComponent:
+    """Factory for height-only fall termination.
+
+    Terminates when any body (except excluded feet) drops below ``termination_height``
+    above the terrain. Does not require contact sensors.
+
+    Args:
+        termination_height: Minimum body height above ground before fall (meters).
+
+    Returns:
+        MdpComponent configured for height-based fall termination.
+    """
+    from protomotions.envs.terminations import height_termination
+
+    return MdpComponent(
+        compute_func=height_termination,
+        dynamic_vars={
+            "rigid_body_pos": EnvContext.current.rigid_body_pos,
+            "ground_heights": EnvContext.ground_heights,
+            "non_termination_body_ids": EnvContext.non_termination_contact_body_ids,
+        },
+        static_params={"termination_height": termination_height},
+    )
+
+
 __all__ = [
     # Observation factories
     "max_coords_obs",
@@ -1298,6 +1350,8 @@ __all__ = [
     "anchor_ori_error_term",
     "relative_body_pos_error_term",
     "anchor_height_error_term",
+    "fall_termination_factory",
+    "fall_height_termination_factory",
     # Evaluation metric factories
     "anchor_height_error_metric_factory",
     "gt_error_factory",

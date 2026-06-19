@@ -266,6 +266,9 @@ class AMP(PPO):
             
             # Inject required motion lib parameters at runtime
             # These are not available in EnvContext, so agent provides them
+            params.setdefault(
+                "num_state_history_steps", self.env.config.num_state_history_steps
+            )
             obs = fn(
                 motion_lib=self.motion_lib,
                 motion_ids=motion_ids,

@@ -346,6 +346,18 @@ class BaseAgent:
 
         self.fabric.call("on_save_checkpoint_end", self)
 
+        if self.fabric.global_rank == 0:
+            from protomotions.utils.wandb_utils import upload_checkpoints_to_wandb
+
+            checkpoint_names = [checkpoint_name]
+            if new_high_score:
+                checkpoint_names.append("score_based.ckpt")
+            upload_checkpoints_to_wandb(
+                save_dir,
+                *checkpoint_names,
+                epoch=self.current_epoch,
+            )
+
     # -----------------------------
     # Experience Buffer and Training Loop
     # -----------------------------

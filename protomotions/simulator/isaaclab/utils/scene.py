@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional
+from typing import List, Optional
 from protomotions.components.terrains.terrain import Terrain
 from protomotions.robot_configs.base import RobotConfig
 import isaaclab.sim as sim_utils
@@ -49,6 +49,7 @@ class SceneCfg(InteractiveSceneCfg):
         robot_config: RobotConfig,
         terrain: Optional[Terrain] = None,
         scene_cfgs=None,
+        object_is_articulated: Optional[List[bool]] = None,
         projectile_config: Optional[ProjectileConfig] = None,
         pretty=False,
         *args,
@@ -80,17 +81,42 @@ class SceneCfg(InteractiveSceneCfg):
         if scene_cfgs is not None:
             num_objects_per_scene = len(scene_cfgs)
             for obj_idx, obj_configs in enumerate(scene_cfgs):
+                is_articulated = (
+                    object_is_articulated is not None
+                    and object_is_articulated[obj_idx]
+                )
+                # Articulated USD props (e.g. procedural trolley) may lack contact
+                # reporter APIs; skip object contact sensors for those assets.
+                object_activate_contact_sensors = (
+                    activate_contact_sensors and not is_articulated
+                )
                 spawn_cfg = sim_utils.MultiAssetSpawnerCfg(
-                    activate_contact_sensors=activate_contact_sensors,
+                    activate_contact_sensors=object_activate_contact_sensors,
                     assets_cfg=obj_configs,
                     random_choice=False,
                 )
-                # Rigid Object
-                object = RigidObjectCfg(
-                    prim_path=f"/World/envs/env_.*/Object_{obj_idx}",
-                    spawn=spawn_cfg,
-                    init_state=RigidObjectCfg.InitialStateCfg(),
-                )
+                if is_articulated:
+                    object = ArticulationCfg(
+                        prim_path=f"/World/envs/env_.*/Object_{obj_idx}",
+                        spawn=spawn_cfg,
+                        init_state=ArticulationCfg.InitialStateCfg(
+                            joint_pos={".*": 0.0},
+                            joint_vel={".*": 0.0},
+                        ),
+                        actuators={
+                            "passive_joints": ImplicitActuatorCfg(
+                                joint_names_expr=[".*"],
+                                stiffness=0.0,
+                                damping=0.0,
+                            ),
+                        },
+                    )
+                else:
+                    object = RigidObjectCfg(
+                        prim_path=f"/World/envs/env_.*/Object_{obj_idx}",
+                        spawn=spawn_cfg,
+                        init_state=RigidObjectCfg.InitialStateCfg(),
+                    )
                 setattr(self, f"object_{obj_idx}", object)
 
                 # Object contact sensors are used to detect collisions between objects.
@@ -98,7 +124,7 @@ class SceneCfg(InteractiveSceneCfg):
                 for i in range(num_objects_per_scene):
                     if i != obj_idx:
                         object_contact_paths.append(f"/World/envs/env_.*/Object_{i}")
-                if activate_contact_sensors:
+                if object_activate_contact_sensors:
                     object_sensor_cfg = ContactSensorCfg(
                         prim_path=f"/World/envs/env_.*/Object_{obj_idx}",
                         # debug_vis=True,

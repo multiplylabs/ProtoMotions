@@ -94,6 +94,8 @@ def process_csv_file(
     joint_units="deg",
     has_header=True,
     has_frame_column=True,
+    start_frame: int = 0,
+    end_frame: Optional[int] = None,
 ):
     """
     Process a G1 CSV file and extract motion data.
@@ -140,6 +142,12 @@ def process_csv_file(
     joint_angles = data[:, col:]
     if joint_units == "deg":
         joint_angles = np.deg2rad(joint_angles)
+
+    if start_frame > 0 or end_frame is not None:
+        end = end_frame if end_frame is not None else root_pos.shape[0]
+        root_pos = root_pos[start_frame:end]
+        root_rot_wxyz = root_rot_wxyz[start_frame:end]
+        joint_angles = joint_angles[start_frame:end]
 
     factor = input_fps // output_fps
     if factor > 1:

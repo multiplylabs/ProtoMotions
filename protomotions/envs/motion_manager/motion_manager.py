@@ -357,6 +357,14 @@ class MotionManager:
 
         return motion_time
 
+    def get_done_tracks(self, env_ids: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Return True for environments whose motion clip has reached the end."""
+        end_times = self.motion_lib.motion_lengths[self.motion_ids]
+        done_clip = (self.motion_times + self.env_dt) >= end_times
+        if env_ids is not None:
+            done_clip = done_clip[env_ids]
+        return done_clip
+
     def sample_motions(
         self, env_ids: torch.Tensor, new_motion_ids: Optional[torch.Tensor] = None
     ):
