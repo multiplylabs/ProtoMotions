@@ -13,12 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import setup
+from setuptools import find_namespace_packages, setup
 
 setup(
     name="protomotions",
     version="3.1",
-    packages=["protomotions"],
+    # find_namespace_packages so non-editable installs (e.g. pip install from git)
+    # ship ALL subpackages. The bare ["protomotions"] only shipped top-level
+    # modules; even classic find_packages misses simulator/, envs/, robot_configs/
+    # etc., which are PEP 420 namespace packages (no __init__.py). This works under
+    # an editable install (whole tree on sys.path) but breaks from a wheel/git install.
+    packages=find_namespace_packages(include=["protomotions", "protomotions.*"]),
     description="Physics-based Character Animation with Reinforcement Learning",
     author="Chen Tessler, Yifeng Jiang",
     python_requires=">=3.8",
