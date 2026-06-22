@@ -187,7 +187,6 @@ def compute_historical_max_coords_from_state(
     
     num_envs = historical_rigid_body_pos.shape[0]
     num_bodies = historical_rigid_body_pos.shape[2]
-    num_contact_bodies = historical_body_contacts.shape[2]
     
     if history_steps is None:
         body_pos = historical_rigid_body_pos
@@ -202,7 +201,11 @@ def compute_historical_max_coords_from_state(
         body_vel = select_step_indices(historical_rigid_body_vel, history_steps)
         body_ang_vel = select_step_indices(historical_rigid_body_ang_vel, history_steps)
         ground_heights = select_step_indices(historical_ground_heights, history_steps)
-        body_contacts = select_step_indices(historical_body_contacts, history_steps)
+        body_contacts = (
+            select_step_indices(historical_body_contacts, history_steps)
+            if historical_body_contacts is not None
+            else None
+        )
     
     actual_steps = body_pos.shape[1]
     batch_size = num_envs * actual_steps
@@ -215,8 +218,17 @@ def compute_historical_max_coords_from_state(
             flat_body_pos, flat_body_rot, flat_body_vel, flat_body_ang_vel
         )
     flat_ground_height = ground_heights.reshape(batch_size, 1)
-    flat_contacts = body_contacts.reshape(batch_size, num_contact_bodies)
-    
+    if observe_contacts:
+        if body_contacts is None:
+            raise ValueError(
+                "observe_contacts=True but historical_body_contacts is None. "
+                "Enable contact tracking on the robot config."
+            )
+        num_contact_bodies = body_contacts.shape[2]
+        flat_contacts = body_contacts.reshape(batch_size, num_contact_bodies)
+    else:
+        flat_contacts = flat_body_pos.new_zeros(batch_size, 1)
+
     flat_obs = compute_humanoid_max_coords_observations(
         body_pos=flat_body_pos,
         body_rot=flat_body_rot,
