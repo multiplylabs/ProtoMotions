@@ -285,6 +285,27 @@ class Simulator(RecordingMixin, ABC):
         # Initialize projectile system
         self._init_projectiles()
 
+        # RMA privileged-extrinsics buffers (per-env). _applied_friction is set
+        # by the backend when friction DR is active; _last_push_vel records the
+        # most recent push impulse (zeroed on reset).
+        self._applied_friction = torch.zeros(self.num_envs, 3, device=self.device)
+        self._last_push_vel = torch.zeros(self.num_envs, 6, device=self.device)
+
+    def get_privileged_extrinsics(self) -> Dict[str, torch.Tensor]:
+        """Per-env privileged DR factors for RMA-style extrinsics encoding.
+
+        Returns observation tensors (the terrain heightmap is provided separately
+        by ``TerrainObs`` as the ``terrain`` key):
+            - ``priv_friction`` [num_envs, 3]: mean static/dynamic friction +
+              restitution applied to the robot (set by the backend).
+            - ``priv_push`` [num_envs, 6]: most recent push impulse (lin xyz +
+              ang xyz), zeroed on episode reset.
+        """
+        return {
+            "priv_friction": self._applied_friction,
+            "priv_push": self._last_push_vel,
+        }
+
     def _init_push_randomization(self) -> None:
         """Initialize push randomization state buffers."""
         push_cfg = None
@@ -343,6 +364,8 @@ class Simulator(RecordingMixin, ABC):
         ) * self._push_max_ang_vel
 
         self._apply_root_velocity_impulse(lin_vel, ang_vel, due_env_ids)
+        # Record the impulse for the RMA privileged-extrinsics obs.
+        self._last_push_vel[due_env_ids] = torch.cat([lin_vel, ang_vel], dim=-1)
         self._schedule_push(due_env_ids)
 
     @abstractmethod
@@ -720,6 +743,7 @@ class Simulator(RecordingMixin, ABC):
         if self._push_enabled:
             self._simulation_time[env_ids] = 0.0
             self._schedule_push(env_ids)
+        self._last_push_vel[env_ids] = 0.0
 
         # Reset projectiles for reset environments
         self._reset_projectiles(env_ids)

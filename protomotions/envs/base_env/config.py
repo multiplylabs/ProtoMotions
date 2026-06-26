@@ -46,6 +46,14 @@ class EnvConfig:
         default=0,
         metadata={"help": "Number of historical state steps to store. 0 = no history.", "min": 0}
     )
+    privileged_dr_obs: bool = field(
+        default=False,
+        metadata={
+            "help": "Expose per-env privileged domain-randomization factors (friction, "
+            "push) as observations ('priv_friction', 'priv_push') for RMA-style "
+            "extrinsics encoding. Terrain heightmap is already exposed as 'terrain'."
+        },
+    )
 
     _target_: str = "protomotions.envs.base_env.env.BaseEnv"
 

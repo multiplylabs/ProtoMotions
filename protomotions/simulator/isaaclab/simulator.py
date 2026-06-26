@@ -502,6 +502,10 @@ class IsaacLabSimulator(Simulator):
             self._robot.root_physx_view.set_material_properties(
                 materials, indices=all_env_ids
             )
+            # Persist the per-env applied friction for the RMA privileged-extrinsics
+            # obs: mean over the robot's shapes -> [num_envs, 3] (static, dynamic,
+            # restitution). materials is [num_envs, total_num_shapes, 3].
+            self._applied_friction = materials.mean(dim=1).to(self.device).clone()
 
         if (
             self._domain_randomization is not None

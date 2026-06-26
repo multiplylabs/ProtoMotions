@@ -342,6 +342,10 @@ class BaseEnv:
         if self.scene_lib.num_scenes() > 0 and self.config.scene_obs.enabled:
             scene_obs = self.scene_obs_cb.get_obs()
             obs.update(scene_obs)
+        if getattr(self.config, "privileged_dr_obs", False):
+            # RMA-style privileged extrinsics (friction, push) for the teacher's
+            # encoder. Terrain heightmap already added above as 'terrain'.
+            obs.update(self.simulator.get_privileged_extrinsics())
 
         # Get dynamic observations
         dynamic_obs = {

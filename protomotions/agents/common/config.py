@@ -190,6 +190,33 @@ class MLPWithConcatConfig(NormObsBaseConfig):
 
 
 @dataclass
+class ExtrinsicsEncoderMLPConfig(MLPWithConcatConfig):
+    """MLPWithConcat with an internal RMA-style extrinsics encoder.
+
+    ``in_keys`` are the deployable/proprioceptive observations (normalized and fed
+    to the trunk). ``extrinsics_keys`` are privileged domain-randomization factors
+    (e.g. terrain heightmap, friction, push) encoded by a small MLP into a latent
+    ``z_t`` of size ``extrinsics_latent_dim``, which is concatenated with the
+    normalized proprioception before the trunk. The encoder lives inside the actor
+    module, so it trains end-to-end under the actor optimizer (no agent changes).
+    """
+
+    _target_: str = "protomotions.agents.common.mlp.ExtrinsicsEncoderMLP"
+    extrinsics_keys: List[str] = field(
+        default_factory=list,
+        metadata={"help": "Privileged obs keys fed to the extrinsics encoder."},
+    )
+    encoder_layers: List[MLPLayerConfig] = field(
+        default_factory=list,
+        metadata={"help": "Hidden layers of the extrinsics encoder MLP."},
+    )
+    extrinsics_latent_dim: int = field(
+        default=8,
+        metadata={"help": "Dimension of the extrinsics latent z_t.", "min": 1},
+    )
+
+
+@dataclass
 class ModuleContainerConfig:
     """Configuration for a container of modules that are executed sequentially.
     

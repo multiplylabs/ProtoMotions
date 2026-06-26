@@ -139,3 +139,49 @@ class MLPWithConcat(TensorDictModuleBase):
                 tensordict[f"norm_{self.config.in_keys[0]}"] = norm_obs
 
         return tensordict
+
+
+class ExtrinsicsEncoderMLP(MLPWithConcat):
+    """MLPWithConcat actor trunk with an internal RMA-style extrinsics encoder.
+
+    Splits its inputs into deployable proprioception (``config.in_keys``,
+    normalized like the base MLP) and privileged domain-randomization factors
+    (``config.extrinsics_keys``, e.g. terrain heightmap / friction / push). The
+    privileged factors are encoded by a small MLP into a latent ``z_t`` of size
+    ``config.extrinsics_latent_dim``, concatenated with the normalized
+    proprioception, and fed to the trunk.
+
+    The encoder lives inside this (actor) module, so it is optimized by the actor
+    optimizer and DDP-wrapped together with the actor -- no agent/model changes.
+    Used for RMA Phase-1 ("teacher"): z_t comes from privileged factors. Phase 2
+    would replace the encoder with an adaptation module predicting z_t from
+    proprioceptive history.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        assert config.extrinsics_keys, "ExtrinsicsEncoderMLP requires extrinsics_keys."
+        enc_layers = []
+        for layer in config.encoder_layers:
+            enc_layers.append(nn.LazyLinear(layer.units))
+            enc_layers.append(get_activation_func(layer.activation))
+        enc_layers.append(nn.LazyLinear(config.extrinsics_latent_dim))
+        self.encoder = nn.Sequential(*enc_layers)
+
+    def forward(self, tensordict: TensorDict) -> TensorDict:
+        # Encode privileged extrinsics -> latent z_t (not obs-normalized).
+        priv = torch.cat([tensordict[key] for key in self.config.extrinsics_keys], dim=-1)
+        z = self.encoder(priv)
+
+        # Normalize deployable proprioception (same running-norm as MLPWithConcat).
+        proprio = torch.cat([tensordict[key] for key in self.config.in_keys], dim=-1)
+        proprio = self.norm(proprio)
+
+        outs = self.mlp(torch.cat([proprio, z], dim=-1))
+        if self.output_activation is not None:
+            outs = self.output_activation(outs)
+
+        tensordict[self.config.out_keys[0]] = outs
+        if self.config.normalize_obs:
+            tensordict[f"norm_{self.config.in_keys[0]}"] = proprio
+        return tensordict
