@@ -303,6 +303,10 @@ class AMP(PPO):
         extras["amp_cumulative_bad_transitions"] = self.num_cumulative_bad_transitions
         extras["amp_discriminator_termination"] = discriminator_termination
 
+        # Log terrain-curriculum progress (mean difficulty level across envs).
+        if getattr(self.env, "terrain_curriculum", None) is not None:
+            extras["terrain_level_mean"] = self.env.terrain_curriculum.terrain_levels.float().mean()
+
         return dones, terminated, extras
 
     @torch.no_grad()
