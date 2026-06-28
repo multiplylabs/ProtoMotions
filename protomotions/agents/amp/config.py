@@ -86,6 +86,30 @@ class AMPParametersConfig:
         metadata={"help": "Max bad transitions before termination.", "min": 1}
     )
 
+    # --- Terrain-gated AMP -----------------------------------------------------
+    # When the AMP reference is flat-ground motion but training runs on varied
+    # terrain, the discriminator wrongly punishes (and terminates) terrain-adapted
+    # gaits. With terrain gating ON, the style reward is down-weighted on rough
+    # ground (full strength on flat) and the style termination only fires on flat,
+    # so the flat reference acts as a hard prior where it is valid and a soft prior
+    # elsewhere. Roughness = std of the local terrain heightmap under the robot.
+    terrain_gated_style: bool = field(
+        default=False,
+        metadata={"help": "Scale style reward + gate style termination by local terrain roughness."}
+    )
+    terrain_roughness_threshold: float = field(
+        default=0.05,
+        metadata={"help": "Heightmap std (m) below which ground is 'flat' (style termination eligible).", "min": 0.0}
+    )
+    terrain_style_weight_min: float = field(
+        default=0.15,
+        metadata={"help": "Floor for the style-reward weight on rough terrain.", "min": 0.0, "max": 1.0}
+    )
+    terrain_roughness_scale: float = field(
+        default=10.0,
+        metadata={"help": "k in style_weight = max(weight_min, exp(-k * roughness)).", "min": 0.0}
+    )
+
 
 @dataclass
 class DiscriminatorConfig(ModuleContainerConfig):

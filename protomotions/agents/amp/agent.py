@@ -306,6 +306,40 @@ class AMP(PPO):
         return dones, terminated, extras
 
     @torch.no_grad()
+    def _terrain_style_gate(self):
+        """Per-env (style_weight, is_flat) from the local terrain roughness.
+
+        Roughness = std of the local terrain heightmap under each robot (offset-
+        invariant, so both slopes and bumps register; flat -> 0). Returns:
+          - style_weight in [terrain_style_weight_min, 1]: 1 on flat, decaying as
+            exp(-k*roughness) on rough ground -> the flat-ground style reward is a
+            hard prior on flat and a soft prior on terrain.
+          - is_flat: roughness < threshold -> only there may the style termination
+            accumulate/fire.
+        No-op (ones / all-True) when gating is disabled or there is no heightmap,
+        so non-terrain experiments are unaffected.
+        """
+        p = self.config.amp_parameters
+        ones = torch.ones(self.num_envs, device=self.device)
+        all_flat = torch.ones(self.num_envs, dtype=torch.bool, device=self.device)
+        if not getattr(p, "terrain_gated_style", False):
+            return ones, all_flat
+        terrain = getattr(self.env, "terrain", None)
+        if terrain is None or getattr(terrain, "num_height_points", 0) <= 1:
+            return ones, all_flat
+
+        root_states = self.env.simulator.get_root_state()
+        height_maps = terrain.get_height_maps(root_states, None)  # [num_envs, num_points]
+        roughness = height_maps.std(dim=-1)
+        style_weight = torch.clamp(
+            torch.exp(-p.terrain_roughness_scale * roughness),
+            min=p.terrain_style_weight_min,
+            max=1.0,
+        )
+        is_flat = roughness < p.terrain_roughness_threshold
+        return style_weight, is_flat
+
+    @torch.no_grad()
     def record_rollout_step(
         self,
         next_obs_td,
@@ -325,9 +359,16 @@ class AMP(PPO):
             self.discriminator.config.out_keys[0]
         ]
         amp_rewards = self.discriminator.compute_disc_reward(disc_logits).flatten()
+
+        # Terrain-gated AMP: full style + style-termination on flat ground, soft
+        # style and NO style-termination on rough/sloped ground (the flat-ground
+        # reference is only valid where the ground is flat). No-op when
+        # terrain_gated_style is False.
+        style_weight, is_flat = self._terrain_style_gate()
+
         bad_transition = (
             amp_rewards < self.config.amp_parameters.discriminator_reward_threshold
-        )
+        ) & is_flat  # only accumulate toward style-termination on flat ground
         self.num_cumulative_bad_transitions[bad_transition] += 1
         self.num_cumulative_bad_transitions[~bad_transition] = 0
 
@@ -338,6 +379,7 @@ class AMP(PPO):
         next_disc_value = next_disc_value * (1 - terminated.float()).unsqueeze(-1)
         self.experience_buffer.update_data("next_disc_value", step, next_disc_value)
 
+        amp_rewards = amp_rewards * style_weight  # down-weight style on rough terrain
         if self.config.normalize_rewards:
             self.running_amp_reward_norm.record_reward(amp_rewards, terminated)
         self.experience_buffer.update_data("amp_rewards", step, amp_rewards)
