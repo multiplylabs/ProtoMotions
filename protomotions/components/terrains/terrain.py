@@ -238,6 +238,13 @@ class Terrain:
         self.walkable_x_coords = walkable_x_indices * self.horizontal_scale
         self.walkable_y_coords = walkable_y_indices * self.horizontal_scale
 
+        # Difficulty level (curriculum row) of each walkable-x cell. The grid lays out
+        # level L over x-pixels [border + L*length_per_env, border + (L+1)*length_per_env]
+        # (see curriculum()), so level = (x_idx - border) // length_per_env_pixels.
+        self.walkable_x_level = torch.div(
+            walkable_x_indices - self.border, self.length_per_env_pixels, rounding_mode="floor"
+        ).clamp(0, self.env_rows - 1)
+
     def compute_flat_coords(self):
         self.flat_field_raw[: self.border, :] = 1
         self.flat_field_raw[
@@ -306,6 +313,27 @@ class Terrain:
         ), f"Invalid height adjustment: expected all >= 0, got min={h.min():.4f}"
 
         return h
+
+    def sample_locations_for_levels(self, levels: torch.Tensor) -> torch.Tensor:
+        """Curriculum spawn: per-env walkable location at that env's difficulty level.
+
+        ``levels`` is a LongTensor [n] of difficulty rows. The x coord is drawn from
+        walkable cells in that level's band; the y coord is a random walkable y
+        (independent of x, mirroring ``sample_valid_locations``). Returns world [n, 2].
+        Falls back to any walkable x if a level has no walkable cells.
+        """
+        levels = levels.to(self.device).long()
+        n = levels.shape[0]
+        x_out = torch.empty(n, device=self.device, dtype=self.walkable_x_coords.dtype)
+        for lvl in torch.unique(levels):
+            mask = levels == lvl
+            pool = (self.walkable_x_level == lvl).nonzero(as_tuple=True)[0]
+            if pool.numel() == 0:
+                pool = torch.arange(self.walkable_x_coords.shape[0], device=self.device)
+            pick = pool[torch.randint(0, pool.numel(), (int(mask.sum().item()),), device=self.device)]
+            x_out[mask] = self.walkable_x_coords[pick]
+        y_idx = torch.randint(0, self.walkable_y_coords.shape[0], (n,), device=self.device)
+        return torch.stack([x_out, self.walkable_y_coords[y_idx]], dim=-1)
 
     def sample_valid_locations(self, num_envs, sample_flat=False):
         if sample_flat:

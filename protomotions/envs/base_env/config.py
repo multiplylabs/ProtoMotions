@@ -27,6 +27,7 @@ from protomotions.envs.motion_manager.config import MotionManagerConfig
 from protomotions.envs.control.base import ControlComponentConfig
 
 if TYPE_CHECKING:
+    from protomotions.components.terrains.curriculum import TerrainCurriculumConfig
     from protomotions.envs.mdp_component import MdpComponent
 
 
@@ -52,6 +53,15 @@ class EnvConfig:
             "help": "Expose per-env privileged domain-randomization factors (friction, "
             "push) as observations ('priv_friction', 'priv_push') for RMA-style "
             "extrinsics encoding. Terrain heightmap is already exposed as 'terrain'."
+        },
+    )
+
+    terrain_curriculum: Optional["TerrainCurriculumConfig"] = field(
+        default=None,
+        metadata={
+            "help": "Per-env terrain difficulty curriculum (IsaacLab terrain_levels_vel "
+            "style): start easy, promote/demote per env at reset by distance + AMP "
+            "style. None disables it. Only applies to terrain (non-scene) spawns."
         },
     )
 

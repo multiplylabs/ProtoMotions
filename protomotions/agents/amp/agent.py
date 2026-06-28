@@ -360,6 +360,10 @@ class AMP(PPO):
         ]
         amp_rewards = self.discriminator.compute_disc_reward(disc_logits).flatten()
 
+        # Feed raw human-likeness to the terrain curriculum (no-op if disabled): it's
+        # the "style" half of the level-promotion criterion.
+        self.env.curriculum_record_amp(amp_rewards)
+
         # Terrain-gated AMP: full style + style-termination on flat ground, soft
         # style and NO style-termination on rough/sloped ground (the flat-ground
         # reference is only valid where the ground is flat). No-op when

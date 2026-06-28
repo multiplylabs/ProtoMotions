@@ -274,6 +274,19 @@ class BaseEnv:
         self.terrain_obs_cb = TerrainObs(self.terrain.config, self)
         self.scene_obs_cb = SceneObs(self.config.scene_obs, self)
 
+        # Optional per-env terrain difficulty curriculum (start easy, promote/demote).
+        self.terrain_curriculum = None
+        _curr_cfg = getattr(self.config, "terrain_curriculum", None)
+        if _curr_cfg is not None and getattr(_curr_cfg, "enabled", False):
+            from protomotions.components.terrains.curriculum import TerrainCurriculum
+
+            self.terrain_curriculum = TerrainCurriculum(
+                num_envs=self.num_envs,
+                num_levels=self.terrain.env_rows,
+                config=_curr_cfg,
+                device=self.device,
+            )
+
         self.control_manager = ControlManager(self.config.control_components, self)
 
         visualization_markers = self.create_visualization_markers(
@@ -480,6 +493,16 @@ class BaseEnv:
         """Default object state (empty if no scenes)."""
         return self.scene_lib.get_default_object_state(self.device)
 
+    def curriculum_record_amp(self, amp_rewards: torch.Tensor) -> None:
+        """Feed the per-step AMP (human-likeness) reward to the terrain curriculum.
+
+        Called by the AMP agent each rollout step; no-op when the curriculum is off.
+        The curriculum accumulates these into the per-episode style signal used (with
+        distance traveled) to decide terrain-level promotion at reset.
+        """
+        if self.terrain_curriculum is not None:
+            self.terrain_curriculum.record_amp(amp_rewards)
+
     def update_respawn_root_offset_by_env_ids(
         self,
         env_ids,
@@ -513,9 +536,18 @@ class BaseEnv:
 
         if non_scene_mask.any():
             num_non_scene = non_scene_mask.sum().item()
-            respawn_position_xy = self.terrain.sample_valid_locations(
-                num_envs=num_non_scene, sample_flat=sample_flat
-            )
+            # Curriculum: spawn each env in its own difficulty-level band; otherwise
+            # uniform over the whole terrain. (sample_flat overrides to flat ground.)
+            if self.terrain_curriculum is not None and not sample_flat:
+                non_scene_env_ids = env_ids[non_scene_mask]
+                respawn_position_xy = self.terrain.sample_locations_for_levels(
+                    self.terrain_curriculum.terrain_levels[non_scene_env_ids]
+                )
+                self.terrain_curriculum.set_start_xy(non_scene_env_ids, respawn_position_xy)
+            else:
+                respawn_position_xy = self.terrain.sample_valid_locations(
+                    num_envs=num_non_scene, sample_flat=sample_flat
+                )
 
             if ref_state is None:
                 ref_root = torch.zeros((num_non_scene, 2), device=self.device)
@@ -1080,6 +1112,14 @@ class BaseEnv:
         if isinstance(env_ids, list):
             env_ids = torch.tensor(env_ids, device=self.device, dtype=torch.long)
         env_ids = env_ids.to(self.device)
+
+        # Terrain curriculum: BEFORE respawn, promote/demote the resetting envs based
+        # on the episode that just ended (distance traveled + AMP style). Uses the
+        # current root xy (the episode's final position). The respawn below then spawns
+        # each env in its (updated) difficulty level.
+        if self.terrain_curriculum is not None:
+            cur_xy = self.simulator.get_root_state(env_ids).root_pos[:, :2]
+            self.terrain_curriculum.on_reset(env_ids, cur_xy)
 
         # Start with default reset for all envs
         new_states, new_object_states = self.compute_default_reset_state(
