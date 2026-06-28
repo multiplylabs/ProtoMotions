@@ -45,6 +45,10 @@ def robot_config(robot_name: str, **updates) -> RobotConfig:
         from protomotions.robot_configs.g1 import G1RobotConfig
 
         config = G1RobotConfig()
+    elif robot_name == "g1_holo_compat_dex3":
+        from protomotions.robot_configs.g1_dex3 import G1Dex3RobotConfig
+
+        config = G1Dex3RobotConfig()
     elif robot_name == "h1_2":
         from protomotions.robot_configs.h1_2 import H1_2RobotConfig
 
