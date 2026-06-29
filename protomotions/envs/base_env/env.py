@@ -194,10 +194,16 @@ class BaseEnv:
         # Initialized properly after simulator init when we know num_bodies
         self.prev_contact_force_magnitudes = None
 
-        # Action buffers (current step only; previous actions come from state_history)
+        # Action buffers (current step only; previous actions come from state_history).
+        # Raw action = the policy output; processed action = the per-dof control
+        # targets sent to the simulator. These usually match (one output per dof),
+        # but an action_config may map a smaller policy output onto all dofs (e.g.
+        # a binary grasp signal expanded to finger PD targets). num_raw_actions
+        # decouples the policy/raw dim from the dof/processed dim in that case.
         num_actions = robot_config.number_of_actions
+        self._num_raw_actions = self.config.num_raw_actions or num_actions
         self._current_raw_action = torch.zeros(
-            self.num_envs, num_actions, dtype=torch.float, device=self.device
+            self.num_envs, self._num_raw_actions, dtype=torch.float, device=self.device
         )
         self._current_processed_action = torch.zeros(
             self.num_envs, num_actions, dtype=torch.float, device=self.device
@@ -248,7 +254,8 @@ class BaseEnv:
                 num_history_steps=self.config.num_state_history_steps,
                 num_bodies=num_bodies,
                 num_dofs=self.robot_config.kinematic_info.num_dofs,
-                action_dim=self.robot_config.number_of_actions,
+                action_dim=self._num_raw_actions,
+                processed_action_dim=self.robot_config.number_of_actions,
                 num_contact_bodies=len(self.contact_body_ids),
                 anchor_body_index=self.robot_config.anchor_body_index,
                 device=self.device,

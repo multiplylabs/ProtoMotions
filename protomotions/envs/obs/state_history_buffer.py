@@ -82,12 +82,19 @@ class StateHistoryBuffer:
         anchor_body_index: int,
         device: torch.device,
         store_noisy: bool = False,
+        processed_action_dim: Optional[int] = None,
     ):
         self.num_envs = num_envs
         self.num_history_steps = num_history_steps
         self.num_bodies = num_bodies
         self.num_dofs = num_dofs
         self.action_dim = action_dim
+        # Processed (per-dof control target) dim. Defaults to action_dim, but may
+        # differ when the policy/raw action dim is smaller than the dof count
+        # (e.g. a binary grasp signal expanded to finger PD targets).
+        self.processed_action_dim = (
+            processed_action_dim if processed_action_dim is not None else action_dim
+        )
         self.num_contact_bodies = num_contact_bodies
         self.anchor_body_index = anchor_body_index
         self.device = device
@@ -125,7 +132,7 @@ class StateHistoryBuffer:
             dtype=torch.float, device=device
         )
         self.processed_actions = torch.zeros(
-            num_envs, buffer_size, action_dim,
+            num_envs, buffer_size, self.processed_action_dim,
             dtype=torch.float, device=device
         )
         self.ground_heights = torch.zeros(
@@ -391,7 +398,12 @@ class StateHistoryBuffer:
         self.dof_pos[:, 0] = dof_pos
         self.dof_vel[:, 0] = dof_vel
         self.actions[:, 0] = actions
-        self.processed_actions[:, 0] = processed_actions if processed_actions is not None else actions
+        if processed_actions is not None:
+            self.processed_actions[:, 0] = processed_actions
+        elif self.processed_action_dim == self.action_dim:
+            self.processed_actions[:, 0] = actions
+        else:
+            self.processed_actions[:, 0] = 0.0
         self.ground_heights[:, 0] = ground_heights
         self.body_contacts[:, 0] = body_contacts
         
@@ -456,7 +468,10 @@ class StateHistoryBuffer:
         
         if actions is not None:
             self.actions[env_ids] = actions
-            self.processed_actions[env_ids] = actions  # Use raw actions as processed on reset
+            if self.processed_action_dim == self.action_dim:
+                self.processed_actions[env_ids] = actions  # Use raw actions as processed on reset
+            else:
+                self.processed_actions[env_ids] = 0.0
         else:
             self.actions[env_ids] = 0.0
             self.processed_actions[env_ids] = 0.0

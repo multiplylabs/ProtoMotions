@@ -127,3 +127,11 @@ class EnvConfig:
         default=None,
         metadata={"help": "Single action processing config dict with 'fn' key. Use make_pd_action_config() helper."}
     )
+
+    num_raw_actions: Optional[int] = field(
+        default=None,
+        metadata={"help": "Policy/raw action dim when it differs from the robot's dof count "
+                          "(e.g. an action_config that expands a smaller policy output onto all dofs, "
+                          "like a binary grasp signal driving finger PD targets). Defaults to "
+                          "robot_config.number_of_actions (one output per dof)."}
+    )
