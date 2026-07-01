@@ -1120,6 +1120,16 @@ class BaseEnv:
             env_ids = torch.tensor(env_ids, device=self.device, dtype=torch.long)
         env_ids = env_ids.to(self.device)
 
+        # Fixed-scene tasks (e.g. cart-pushing) must not use reference-state-init:
+        # RSI spawns each env at a random reference-motion frame and derives the
+        # respawn offset from it, randomizing the robot's placement relative to the
+        # scene object -> occasional spawn interpenetration -> physics NaN. Force
+        # default reset so the init pose is placed deterministically every time.
+        if self.config.disable_reference_state_init and force_default_mask is None:
+            force_default_mask = torch.ones(
+                len(env_ids), dtype=torch.bool, device=self.device
+            )
+
         # Terrain curriculum: BEFORE respawn, promote/demote the resetting envs based
         # on the episode that just ended (distance traveled + AMP style). Uses the
         # current root xy (the episode's final position). The respawn below then spawns

@@ -85,6 +85,17 @@ class EnvConfig:
         default=0.0,
         metadata={"help": "Height offset for object respawning."}
     )
+    disable_reference_state_init: bool = field(
+        default=False,
+        metadata={"help": (
+            "Force every reset to the default/init-pose state instead of reference-state-init "
+            "(RSI). RSI spawns each env at a random reference-motion frame and derives the "
+            "respawn offset from it; for fixed-scene tasks (e.g. cart-pushing) that randomizes "
+            "the robot's placement relative to the scene object and can spawn it interpenetrating "
+            "-> physics NaN. The AMP discriminator still samples its motion reference separately, "
+            "so style learning is unaffected."
+        )}
+    )
     ref_contact_smooth_window: int = field(
         default=0,
         metadata={"help": "Window length for smoothing contact labels. 0 = no smoothing.", "min": 0}

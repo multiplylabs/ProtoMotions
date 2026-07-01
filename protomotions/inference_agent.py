@@ -194,9 +194,21 @@ def main():
     ), f"Could not find resolved configs at {resolved_configs_path}"
 
     log.info(f"Loading resolved configs from {resolved_configs_path}")
+    # Seahorse/Anyscale-trained checkpoints pickle out-of-tree ``tasks.*`` compute
+    # functions by import path and bake absolute ``/tmp/.../working_dir`` cluster
+    # asset paths into the configs. Register the legacy module aliases before
+    # unpickling, then rebase the baked paths back to local repo defaults (e.g.
+    # robot ``asset_root`` -> ``protomotions/data/assets``).
+    from protomotions.utils.legacy_pickle_compat import (
+        register_legacy_module_aliases,
+        sanitize_anyscale_paths,
+    )
+
+    register_legacy_module_aliases()
     resolved_configs = torch.load(
         resolved_configs_path, map_location="cpu", weights_only=False
     )
+    sanitize_anyscale_paths(resolved_configs)
 
     robot_config = resolved_configs["robot"]
     simulator_config = resolved_configs["simulator"]

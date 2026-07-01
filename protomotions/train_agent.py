@@ -235,7 +235,14 @@ def create_parser():
         "--nodes", type=int, default=1, help="Number of nodes for distributed training"
     )
     parser.add_argument(
-        "--headless", default=True, help="Run simulation in headless mode"
+        "--headless",
+        # Parse as a real bool: with no type=, "--headless true/false" became a
+        # truthy string, so headless couldn't be turned off and IsaacLab's
+        # AppLauncher may not treat the string as bool True -> it can open a render
+        # window (seen locally with a display). Coerce common truthy tokens.
+        type=lambda s: str(s).strip().lower() in ("1", "true", "t", "yes", "y"),
+        default=True,
+        help="Run simulation in headless mode (default: True)",
     )
     parser.add_argument(
         "--seed", type=int, default=0, help="Random seed for reproducibility"
