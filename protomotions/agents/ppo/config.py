@@ -55,6 +55,15 @@ class PPOActorConfig:
     )
     num_out: int = field(default=None, metadata={"help": "Number of actions. Set from robot config."})
     actor_logstd: float = field(default=-2.9, metadata={"help": "Initial log std for action distribution."})
+    actor_logstd_overrides: Optional[Dict[int, float]] = field(
+        default=None,
+        metadata={
+            "help": "Per-action-dim overrides of the INITIAL log std, keyed by action "
+            "index. Use to give a few dims (e.g. binary grasp signals) much more "
+            "exploration than the rest without raising the global std. Applied on top "
+            "of actor_logstd at init; still learnable if learnable_std=True.",
+        },
+    )
     learnable_std: bool = field(
         default=False,
         metadata={"help": "Make action log std learnable (requires_grad=True)."},

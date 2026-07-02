@@ -52,8 +52,14 @@ class PPOActor(TensorDictModuleBase):
     def __init__(self, config: PPOActorConfig):
         super().__init__()
         self.config = config
+        logstd_init = torch.ones(self.config.num_out) * self.config.actor_logstd
+        # Per-dim initial-logstd overrides: let a few action dims (e.g. binary grasp
+        # signals) explore much more than the rest without raising the global std.
+        if self.config.actor_logstd_overrides:
+            for idx, val in self.config.actor_logstd_overrides.items():
+                logstd_init[int(idx)] = val
         self.logstd = nn.Parameter(
-            torch.ones(self.config.num_out) * self.config.actor_logstd,
+            logstd_init,
             requires_grad=self.config.learnable_std,
         )
         MuClass = get_class(self.config.mu_model._target_)
